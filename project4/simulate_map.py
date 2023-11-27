@@ -24,10 +24,15 @@ class SimulateMap(Node):
         # Parse the map string and convert it to an occupancy grid
         occupancy_grid = self.parse_map_string()
 
+        print("Hello!")
+
         # Create an OccupancyGrid message
         map_msg = OccupancyGrid()
-        map_msg.header.frame_id = 'odom'
+        map_msg.header.frame_id = 'world'
+        map_msg.header.stamp = self.get_clock().now().to_msg()
         map_msg.info.resolution = self.world_resolution
+        map_msg.info.width = 18
+        map_msg.info.height = 12
         map_msg.info.origin.position.x = self.world_initial_pose[0]
         map_msg.info.origin.position.y = self.world_initial_pose[1]
         map_msg.info.origin.position.z = 0.0

@@ -92,7 +92,7 @@ class SimulateRobot(Node):
         # Broadcast transform from world to base_link
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = 'odom'
+        t.header.frame_id = 'world'
         t.child_frame_id = 'base_link'
         t.transform.translation = Vector3(x=self.current_pose['x'], y=self.current_pose['y'], z=0.0)
         q = self.get_quaternion(self.current_pose['theta'])
