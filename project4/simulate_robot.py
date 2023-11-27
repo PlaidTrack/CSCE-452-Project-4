@@ -6,24 +6,18 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
 from geometry_msgs.msg import TransformStamped, Quaternion, Vector3
+from nav_msgs.msg import OccupancyGrid
 from tf2_ros import TransformBroadcaster
 from math import cos, sin
+import numpy as np
 import time
 
 class SimulateRobot(Node):
     def __init__(self):
         super().__init__('simulate_robot')
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                ('radius', 0.2),
-                ('height', 0.06),
-                ('distance', 0.3),
-                ('velocity_error_variance', 0.01),
-            ]
-        )
-
+        
         input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
+        input_world = '/root/ros2_project4/src/project4/world_data/brick.world'
 
         self.robot_radius = 0.0
         self.robot_height = 0.0
@@ -33,8 +27,21 @@ class SimulateRobot(Node):
         self.robot = self.load_disc_robot(input_robot_yaml)
 
         self.get_logger().info("Differential Drive Simulator Initialized")
+        
+        # Each cell is a square with this side length,
+        # measured in meters.
+        self.world_resolution = 0.0
+        
+        # The robot starts here, given as [x, y, theta], with
+        # x and y in meters and theta in radians.
+        self.robot_initial_pose = [0.0, 0.0, 0.0]   # Fetched from world file
+        
+        # Where the obstacles be
+        self.world_map = ""
 
-        self.current_pose = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
+        self.load_world(input_world)
+
+        self.current_pose = {'x': self.world_initial_pose[0], 'y': self.world_initial_pose[1], 'theta': self.world_initial_pose[2]}
         self.last_velocity_time = time.time()
         self.last_received_vl = 0.0
         self.last_received_vr = 0.0
@@ -43,10 +50,14 @@ class SimulateRobot(Node):
             Float64, '/vl', self.vl_callback, 10)
         self.vr_sub = self.create_subscription(
             Float64, '/vr', self.vr_callback, 10)
+        
+        self.map_publisher = self.create_publisher(
+            OccupancyGrid, '/map', 10)
 
         self.tf_broadcaster = TransformBroadcaster(self)
 
         self.timer = self.create_timer(0.1, self.update_pose)
+        self.timer = self.create_timer(1.0, self.publish_map)
 
     def vl_callback(self, msg):
         self.last_velocity_time = time.time()
@@ -109,6 +120,7 @@ class SimulateRobot(Node):
         print(self.robot_radius)
         print(self.robot_height)
         return robot
+    
 
     def disc_robot_urdf(self, robot):
         self.robot_radius = robot['body']['radius']
@@ -116,6 +128,57 @@ class SimulateRobot(Node):
         self.robot_wheel_distance = robot['wheels']['distance']
         self.robot_error_variance_l = robot['wheels']['error_variance_left']
         self.robot_error_variance_r = robot['wheels']['error_variance_right']
+    
+    def publish_map(self):
+        # Parse the map string and convert it to an occupancy grid
+        occupancy_grid = self.parse_map_string()
+
+        # Create an OccupancyGrid message
+        map_msg = OccupancyGrid()
+        map_msg.header.frame_id = 'world'
+        map_msg.header.stamp = self.get_clock().now().to_msg()
+        map_msg.info.resolution = self.world_resolution
+        map_msg.info.width = 18
+        map_msg.info.height = 12
+        map_msg.info.origin.position.x = 0.0
+        map_msg.info.origin.position.y = 0.0
+        map_msg.info.origin.position.z = 0.0
+        map_msg.info.origin.orientation.x = 0.0
+        map_msg.info.origin.orientation.y = 0.0
+        map_msg.info.origin.orientation.z = 0.0
+        map_msg.info.origin.orientation.w = 1.0
+
+        # Convert the 2D numpy array to a flattened list
+        map_data = occupancy_grid.flatten().tolist()
+        map_msg.data = map_data
+
+        # Publish the map
+        self.map_publisher.publish(map_msg)
+    
+    def parse_map_string(self):
+        lines = self.world_map.strip().split('\n')  # Separate lines
+        rows = [list(line.strip()) for line in lines]
+
+        # Convert map symbols to numeric values (0 for free space, 100 for obstacles)
+        occupancy_grid = np.zeros((len(rows), len(rows[0])), dtype=np.int8)
+        for i, row in enumerate(rows):
+            for j, symbol in enumerate(row):
+                if symbol == '.':
+                    occupancy_grid[i, j] = 0  # Free space
+                elif symbol == '#':
+                    occupancy_grid[i, j] = 100  # Obstacle
+
+        return occupancy_grid
+
+    def load_world(self, file_name):
+        with open(file_name, 'r') as f:
+            world = yaml.safe_load(f)
+        world['urdf'] = self.fetch_world_info(world)
+    
+    def fetch_world_info(self, world):
+        self.world_resolution = world['resolution']
+        self.world_initial_pose = world['initial_pose']
+        self.world_map = world['map']
 
 
 # write a new urdf file based on robot data
