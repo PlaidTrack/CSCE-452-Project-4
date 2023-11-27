@@ -16,8 +16,8 @@ class SimulateRobot(Node):
     def __init__(self):
         super().__init__('simulate_robot')
         
-        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
-        input_world = '/root/ros2_project4/src/project4/world_data/brick.world'
+        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
+        input_world = '/root/ros2_project4/src/project4/world_data/ell.world'
 
         self.robot_radius = 0.0
         self.robot_height = 0.0
@@ -31,6 +31,8 @@ class SimulateRobot(Node):
         # Each cell is a square with this side length,
         # measured in meters.
         self.world_resolution = 0.0
+        self.map_width = 0
+        self.map_height = 0
         
         # The robot starts here, given as [x, y, theta], with
         # x and y in meters and theta in radians.
@@ -56,8 +58,9 @@ class SimulateRobot(Node):
 
         self.tf_broadcaster = TransformBroadcaster(self)
 
+        self.publish_map()
         self.timer = self.create_timer(0.1, self.update_pose)
-        self.timer = self.create_timer(1.0, self.publish_map)
+        #self.timer = self.create_timer(1.0, self.publish_map)
 
     def vl_callback(self, msg):
         self.last_velocity_time = time.time()
@@ -138,8 +141,8 @@ class SimulateRobot(Node):
         map_msg.header.frame_id = 'world'
         map_msg.header.stamp = self.get_clock().now().to_msg()
         map_msg.info.resolution = self.world_resolution
-        map_msg.info.width = 18
-        map_msg.info.height = 12
+        map_msg.info.width = self.map_width
+        map_msg.info.height = self.map_height
         map_msg.info.origin.position.x = 0.0
         map_msg.info.origin.position.y = 0.0
         map_msg.info.origin.position.z = 0.0
@@ -157,16 +160,25 @@ class SimulateRobot(Node):
     
     def parse_map_string(self):
         lines = self.world_map.strip().split('\n')  # Separate lines
-        rows = [list(line.strip()) for line in lines]
+        rows = [list(line.strip()) for line in reversed(lines)]
+
+        map_h = 0
+        map_w = 0
 
         # Convert map symbols to numeric values (0 for free space, 100 for obstacles)
         occupancy_grid = np.zeros((len(rows), len(rows[0])), dtype=np.int8)
         for i, row in enumerate(rows):
+            map_h += 1
+            map_w = 0
             for j, symbol in enumerate(row):
+                map_w += 1
                 if symbol == '.':
                     occupancy_grid[i, j] = 0  # Free space
                 elif symbol == '#':
                     occupancy_grid[i, j] = 100  # Obstacle
+
+        self.map_width = map_w
+        self.map_height = map_h
 
         return occupancy_grid
 
