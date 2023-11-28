@@ -5,9 +5,9 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64, Header
-from geometry_msgs.msg import TransformStamped, Quaternion, Vector3
+from geometry_msgs.msg import TransformStamped, Quaternion, Vector3, Point32
 from nav_msgs.msg import OccupancyGrid, Odometry
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, PointCloud
 from tf2_ros import TransformBroadcaster
 from math import cos, sin
 import numpy as np
@@ -17,8 +17,8 @@ class SimulateRobot(Node):
     def __init__(self):
         super().__init__('simulate_robot')
         
-        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
-        input_world = '/root/ros2_project4/src/project4/world_data/brick.world'
+        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/bad_robot.yaml'
+        input_world = '/root/ros2_project4/src/project4/world_data/ell.world'
 
         # Robot body
         self.robot_radius = 0.0
@@ -71,8 +71,8 @@ class SimulateRobot(Node):
         self.map_publisher = self.create_publisher(
             OccupancyGrid, '/map', 10)
 
-        self.scan_publisher = self.create_publisher(
-            LaserScan, '/scan', 10)
+        self.point_cloud_publisher = self.create_publisher(
+            PointCloud, '/point_cloud', 10)
 
         self.tf_broadcaster = TransformBroadcaster(self)
 
@@ -103,7 +103,7 @@ class SimulateRobot(Node):
         if not self.check_collision(vl, vr):
             self.update_pose_from_velocities(vl, vr)
         
-        self.publish_laser_scan()
+        self.publish_point_cloud()
     
     def check_collision(self, vl, vr):
         # Simulate the new pose based on the wheel velocities
@@ -260,7 +260,18 @@ class SimulateRobot(Node):
         scan_msg.intensities = intensities
 
         # Publish laser scan
-        self.scan_publisher.publish(scan_msg)
+        #self.scan_publisher.publish(scan_msg)
+        return scan_msg
+    
+    def publish_point_cloud(self):
+        scan_msg = self.publish_laser_scan()
+
+        # Convert laser scan to point cloud
+        point_cloud_msg = self.laser_scan_to_point_cloud(scan_msg)
+
+        # Publish the point cloud
+        self.point_cloud_publisher.publish(point_cloud_msg)
+
 
     def simulate_laser_measurements(self):
         # Fetch current robot pose
@@ -355,6 +366,23 @@ class SimulateRobot(Node):
         self.map_height = map_h
 
         return occupancy_grid
+    
+    def laser_scan_to_point_cloud(self, scan):
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = 'base_link'
+
+        return PointCloud(
+            header=header,
+            points=[
+                Point32(
+                    x=scan.ranges[i] * cos(scan.angle_min + i * scan.angle_increment),
+                    y=scan.ranges[i] * sin(scan.angle_min + i * scan.angle_increment),
+                    z=0.0
+                )
+                for i in range(len(scan.ranges))
+            ]
+        )
 
     def load_world(self, file_name):
         with open(file_name, 'r') as f:
