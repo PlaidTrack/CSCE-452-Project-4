@@ -17,8 +17,8 @@ class SimulateRobot(Node):
     def __init__(self):
         super().__init__('simulate_robot')
         
-        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
-        input_world = '/root/ros2_project4/src/project4/world_data/rectangle.world'
+        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
+        input_world = '/root/ros2_project4/src/project4/world_data/brick.world'
 
         # Robot body
         self.robot_radius = 0.0
@@ -99,8 +99,55 @@ class SimulateRobot(Node):
             vl = self.last_received_vl
             vr = self.last_received_vr
 
-        self.update_pose_from_velocities(vl, vr)
+        # Collision check
+        if not self.check_collision(vl, vr):
+            self.update_pose_from_velocities(vl, vr)
+        
         self.publish_laser_scan()
+    
+    def check_collision(self, vl, vr):
+        # Simulate the new pose based on the wheel velocities
+        new_pose = self.simulate_pose_from_velocities(vl, vr)
+
+        # Extract the position components
+        new_x, new_y, _ = new_pose
+
+        # Adjust the coordinates based on the robot's radius
+        adjusted_x = new_x + self.robot_radius * cos(new_pose[2])
+        adjusted_y = new_y + self.robot_radius * sin(new_pose[2])
+
+        # Convert the new position to grid coordinates
+        px = int(adjusted_x / self.world_resolution)
+        py = int(adjusted_y / self.world_resolution)
+
+        # Check for collisions with obstacles in the occupancy grid
+        if 0 <= px < self.map_width and 0 <= py < self.map_height:
+            if self.occupancy_grid[py, px] > 0:
+                # Collision detected, stop the robot
+                return True
+
+        return False
+
+    def simulate_pose_from_velocities(self, vl, vr):
+        # Simulate the new pose based on the wheel velocities
+        radius = self.robot_radius
+        distance = self.robot_wheel_distance
+
+        dt = 0.1  # Time step for integration
+
+        omega = (vr - vl) / distance
+        v = (vr + vl) / 2.0
+
+        dx = v * cos(self.current_pose['theta']) * dt
+        dy = v * sin(self.current_pose['theta']) * dt
+        dtheta = omega * dt
+
+        # Simulate the new pose
+        new_x = self.current_pose['x'] + dx
+        new_y = self.current_pose['y'] + dy
+        new_theta = self.current_pose['theta'] + dtheta
+
+        return new_x, new_y, new_theta
 
     def update_pose_from_velocities(self, vl, vr):
         # Apply random multiplicative error to velocities
