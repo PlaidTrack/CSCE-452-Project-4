@@ -76,6 +76,9 @@ class SimulateRobot(Node):
 
         self.tf_broadcaster = TransformBroadcaster(self)
 
+        # Parse the map string and convert it to an occupancy grid
+        self.occupancy_grid = self.parse_map_string()
+
         self.publish_map()
         self.timer = self.create_timer(0.1, self.update_pose)
         #self.timer = self.create_timer(1.0, self.publish_map)
@@ -165,9 +168,6 @@ class SimulateRobot(Node):
         self.laser_fail_probaability = robot['laser']['fail_probability']
     
     def publish_map(self):
-        # Parse the map string and convert it to an occupancy grid
-        occupancy_grid = self.parse_map_string()
-
         # Create an OccupancyGrid message
         map_msg = OccupancyGrid()
         map_msg.header.frame_id = 'world'
@@ -184,7 +184,7 @@ class SimulateRobot(Node):
         map_msg.info.origin.orientation.w = 1.0
 
         # Convert the 2D numpy array to a flattened list
-        map_data = occupancy_grid.flatten().tolist()
+        map_data = self.occupancy_grid.flatten().tolist()
         map_msg.data = map_data
 
         # Publish the map
@@ -216,23 +216,65 @@ class SimulateRobot(Node):
         self.scan_publisher.publish(scan_msg)
 
     def simulate_laser_measurements(self):
+        # Fetch current robot pose
+        x, y, theta = self.current_pose['x'], self.current_pose['y'], self.current_pose['theta']
+
+        # Extract laser parameters from the robot description
+        angle_min = self.laser_angle_min
+        angle_max = self.laser_angle_max
+        count = self.laser_count
+        range_min = self.laser_range_min
+        range_max = self.laser_range_max
+        error_variance = self.laser_error_variance
+
         # Calculate the angles for each laser beam
         angles = np.linspace(
-            self.laser_angle_min,
-            self.laser_angle_max,
-            self.laser_count
+            angle_min,
+            angle_max,
+            count
         )
 
+        # Simulate laser movements
+        simulated_distances = []
+        intensities = []
+        for angle in angles:
+            # Transform angle to global frame
+            global_angle = theta + angle
+
+            # Cast rays from the robot's position and simulate measurements
+            distance = self.cast_ray(x, y, global_angle, range_min, range_max, error_variance)
+            simulated_distances.append(distance)
+            intensities.append(383.0)
+
         # Simulate laser measurements with random noise
-        true_distances = self.calculate_true_distances(angles)
+        #true_distances = self.calculate_true_distances(angles)
         #noisy_distances = self.add_noise_to_distances(true_distances)
-        noisy_distances = np.random.normal(true_distances, self.laser_error_variance)
-        noisy_distances = list(noisy_distances)
+        #noisy_distances = np.random.normal(true_distances, self.laser_error_variance)
+        #noisy_distances = list(noisy_distances)
 
-        intensities = np.full_like(noisy_distances, fill_value=383.0)
-        intensities = list(intensities)
+        #intensities = np.full_like(noisy_distances, fill_value=383.0)
+        #intensities = list(intensities)
 
-        return noisy_distances, intensities
+        return simulated_distances, intensities
+    
+    def cast_ray(self, x, y, angle, range_min, range_max, error_variance):
+        # Cast a ray from the robot's position in the specified direction
+        dx = np.cos(angle)
+        dy = np.sin(angle)
+
+        # Simulate laser measurements
+        for d in np.arange(range_min, range_max, 0.01):  # Adjust the step size as needed
+            px = int((x + d * dx) / self.world_resolution)
+            py = int((y + d * dy) / self.world_resolution)
+
+            # Check for collisions with obstacles in the occupancy grid
+            if 0 <= px < self.map_width and 0 <= py < self.map_height:
+                if self.occupancy_grid[py, px] > 0:
+                    # Collision detected
+                    return d + np.random.normal(0, error_variance)
+
+        # No collision, return maximum range
+        return range_max + np.random.normal(0, error_variance)
     
     def calculate_true_distances(self, angles):
         # Calculate true distances to obstacle based on the robot's pose and world map
