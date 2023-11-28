@@ -4,9 +4,10 @@
 import yaml
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Header
 from geometry_msgs.msg import TransformStamped, Quaternion, Vector3
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
+from sensor_msgs.msg import LaserScan
 from tf2_ros import TransformBroadcaster
 from math import cos, sin
 import numpy as np
@@ -17,13 +18,27 @@ class SimulateRobot(Node):
         super().__init__('simulate_robot')
         
         input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
-        input_world = '/root/ros2_project4/src/project4/world_data/ell.world'
+        input_world = '/root/ros2_project4/src/project4/world_data/rectangle.world'
 
+        # Robot body
         self.robot_radius = 0.0
         self.robot_height = 0.0
+
+        # Robot wheels
         self.robot_wheel_distance = 0.0
         self.robot_error_variance_l = 0.0
         self.robot_error_variance_r = 0.0
+
+        # Robot laser scanner
+        self.laser_rate = 0
+        self.laser_count = 0
+        self.laser_angle_min = 0.0
+        self.laser_angle_max = 0.0
+        self.laser_range_min = 0.0
+        self.laser_range_max = 0.0
+        self.laser_error_variance = 0.0
+        self.laser_fail_probaability = 0.0
+
         self.robot = self.load_disc_robot(input_robot_yaml)
 
         self.get_logger().info("Differential Drive Simulator Initialized")
@@ -56,6 +71,9 @@ class SimulateRobot(Node):
         self.map_publisher = self.create_publisher(
             OccupancyGrid, '/map', 10)
 
+        self.scan_publisher = self.create_publisher(
+            LaserScan, '/scan', 10)
+
         self.tf_broadcaster = TransformBroadcaster(self)
 
         self.publish_map()
@@ -79,6 +97,7 @@ class SimulateRobot(Node):
             vr = self.last_received_vr
 
         self.update_pose_from_velocities(vl, vr)
+        self.publish_laser_scan()
 
     def update_pose_from_velocities(self, vl, vr):
         # Apply random multiplicative error to velocities
@@ -126,11 +145,24 @@ class SimulateRobot(Node):
     
 
     def disc_robot_urdf(self, robot):
+        # Body
         self.robot_radius = robot['body']['radius']
         self.robot_height = robot['body']['height']
+
+        # Wheels
         self.robot_wheel_distance = robot['wheels']['distance']
         self.robot_error_variance_l = robot['wheels']['error_variance_left']
         self.robot_error_variance_r = robot['wheels']['error_variance_right']
+
+        # Laser
+        self.laser_rate = robot['laser']['rate']
+        self.laser_count = robot['laser']['count']
+        self.laser_angle_min = robot['laser']['angle_min']
+        self.laser_angle_max = robot['laser']['angle_max']
+        self.laser_range_min = robot['laser']['range_min']
+        self.laser_range_max = robot['laser']['range_max']
+        self.laser_error_variance = robot['laser']['error_variance']
+        self.laser_fail_probaability = robot['laser']['fail_probability']
     
     def publish_map(self):
         # Parse the map string and convert it to an occupancy grid
@@ -157,6 +189,59 @@ class SimulateRobot(Node):
 
         # Publish the map
         self.map_publisher.publish(map_msg)
+    
+    def publish_laser_scan(self):
+        scan_msg = LaserScan()
+        scan_msg.header.frame_id = 'laser'
+        scan_msg.header.stamp = self.get_clock().now().to_msg()
+
+        # Get simulated laser movements
+        ranges, intensities = self.simulate_laser_measurements()
+
+        # Pushes laser variables from YAML file to message
+        scan_msg.angle_min = self.laser_angle_min
+        scan_msg.angle_max = self.laser_angle_max
+        scan_msg.angle_increment = (self.laser_angle_max + abs(self.laser_angle_min)) / self.laser_count
+        scan_msg.range_min = self.laser_range_min
+        #scan_msg.range_max = self.laser_range_max
+        scan_msg.range_max = self.laser_range_max
+        scan_msg.scan_time = 1.0 / self.laser_rate
+        scan_msg.time_increment = scan_msg.scan_time / self.laser_count
+
+        # Simulated laser measurements
+        scan_msg.ranges = ranges
+        scan_msg.intensities = intensities
+
+        # Publish laser scan
+        self.scan_publisher.publish(scan_msg)
+
+    def simulate_laser_measurements(self):
+        # Calculate the angles for each laser beam
+        angles = np.linspace(
+            self.laser_angle_min,
+            self.laser_angle_max,
+            self.laser_count
+        )
+
+        # Simulate laser measurements with random noise
+        true_distances = self.calculate_true_distances(angles)
+        #noisy_distances = self.add_noise_to_distances(true_distances)
+        noisy_distances = np.random.normal(true_distances, self.laser_error_variance)
+        noisy_distances = list(noisy_distances)
+
+        intensities = np.full_like(noisy_distances, fill_value=383.0)
+        intensities = list(intensities)
+
+        return noisy_distances, intensities
+    
+    def calculate_true_distances(self, angles):
+        # Calculate true distances to obstacle based on the robot's pose and world map
+        #return np.ones_like(angles) * self.laser_range_max
+        return np.ones_like(angles) * self.laser_range_max
+    
+    def add_noise_to_distances(self, true_distances):
+        # Add random noise to laser measurements based on error characteristics
+        return true_distances + np.random.normal(0.0, self.laser_error_variance, len(true_distances))
     
     def parse_map_string(self):
         lines = self.world_map.strip().split('\n')  # Separate lines
