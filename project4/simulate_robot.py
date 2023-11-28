@@ -19,7 +19,7 @@ class SimulateRobot(Node):
         
         input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/bad_robot.yaml'
         input_world = '/root/ros2_project4/src/project4/world_data/ell.world'
-
+        
         # Robot body
         self.robot_radius = 0.0
         self.robot_height = 0.0
@@ -70,6 +70,9 @@ class SimulateRobot(Node):
         
         self.map_publisher = self.create_publisher(
             OccupancyGrid, '/map', 10)
+
+        self.laser_scan_publisher = self.create_publisher(
+            LaserScan, '/scan', 10)
 
         self.point_cloud_publisher = self.create_publisher(
             PointCloud, '/point_cloud', 10)
@@ -260,7 +263,8 @@ class SimulateRobot(Node):
         scan_msg.intensities = intensities
 
         # Publish laser scan
-        #self.scan_publisher.publish(scan_msg)
+        self.laser_scan_publisher.publish(scan_msg)
+
         return scan_msg
     
     def publish_point_cloud(self):
@@ -427,7 +431,7 @@ def main():
     rclpy.init()
     simulator = SimulateRobot()
     
-    input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
+    input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/bad_robot.yaml'
     output_robot_urdf = '/root/ros2_project4/src/project4/urdf/new_robot.urdf.xml'
     write_new_urdf(input_robot_yaml, output_robot_urdf)
 
