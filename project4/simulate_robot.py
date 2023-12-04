@@ -17,8 +17,8 @@ class SimulateRobot(Node):
     def __init__(self):
         super().__init__('simulate_robot')
         
-        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/bad_robot.yaml'
-        input_world = '/root/ros2_project4/src/project4/world_data/ell.world'
+        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
+        input_world = '/root/ros2_project4/src/project4/world_data/cave.world'
         
         # Robot body
         self.robot_radius = 0.0
@@ -431,7 +431,7 @@ def main():
     rclpy.init()
     simulator = SimulateRobot()
     
-    input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/bad_robot.yaml'
+    input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
     output_robot_urdf = '/root/ros2_project4/src/project4/urdf/new_robot.urdf.xml'
     write_new_urdf(input_robot_yaml, output_robot_urdf)
 
