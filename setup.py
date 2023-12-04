@@ -26,7 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'simulate_robot = project4.simulate_robot:main',
-            'simulate_map = project4.simulate_map:main'
+            'translate_velocity = project4.velocity_translator:main'
         ],
     },
 )
