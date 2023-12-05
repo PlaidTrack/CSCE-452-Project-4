@@ -17,8 +17,8 @@ class SimulateRobot(Node):
     def __init__(self):
         super().__init__('simulate_robot')
         
-        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
-        input_world = '/root/ros2_project4/src/project4/world_data/cave.world'
+        input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
+        input_world = '/root/ros2_project4/src/project4/world_data/windy.world'
         
         # Robot body
         self.robot_radius = 0.0
@@ -82,9 +82,9 @@ class SimulateRobot(Node):
         # Parse the map string and convert it to an occupancy grid
         self.occupancy_grid = self.parse_map_string()
 
-        self.publish_map()
+        #self.publish_map()
+        self.timer = self.create_timer(1.0, self.publish_map)
         self.timer = self.create_timer(0.1, self.update_pose)
-        #self.timer = self.create_timer(1.0, self.publish_map)
 
     def vl_callback(self, msg):
         self.last_velocity_time = time.time()
@@ -431,7 +431,7 @@ def main():
     rclpy.init()
     simulator = SimulateRobot()
     
-    input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/ideal_robot.yaml'
+    input_robot_yaml = '/root/ros2_project4/src/project4/robot_data/normal_robot.yaml'
     output_robot_urdf = '/root/ros2_project4/src/project4/urdf/new_robot.urdf.xml'
     write_new_urdf(input_robot_yaml, output_robot_urdf)
 

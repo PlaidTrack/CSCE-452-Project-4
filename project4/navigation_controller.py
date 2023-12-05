@@ -3,6 +3,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 import numpy as np
+import math
 
 class NavigationController(Node):
     def __init__(self):
@@ -13,7 +14,8 @@ class NavigationController(Node):
 
         # Parameters for the controller
         self.target_distance_from_wall = 0.5  # Adjust as needed
-        self.linear_speed = 0.2  # Adjust as needed
+        self.linear_speed = 0.35  # Adjust as needed
+        self.turn_around_threshold = 0.4  # Adjust as needed
 
     def scan_callback(self, msg):
         # Process laser scan data and generate velocity commands
@@ -35,11 +37,30 @@ class NavigationController(Node):
         error = left_avg_range - right_avg_range
 
         # Proportional control to maintain the largest range in the center
-        angular_z = -0.1 * error
+        angular_z = -0.2 * error
+
+        frontmost_range_avg = 0
+
+        for i in range(len(ranges)):
+            if (i > center_index - 5) and (i < center_index + 5):
+                frontmost_range_avg += ranges[i]
+
+        frontmost_range_avg = frontmost_range_avg / 10
+
+        # Check the frontmost laser scan range
+        frontmost_range = ranges[center_index]
+
+        # If the frontmost range is below the threshold, stop linear motion and turn around
+        if frontmost_range < self.turn_around_threshold:
+            print("Goal Reached!")
+            linear_x = 0.0
+            angular_z = 1.0  # High angular speed for turning around
+        else:
+            linear_x = self.linear_speed
 
         # Create Twist message with linear velocity and angular velocity
         cmd_vel_msg = Twist()
-        cmd_vel_msg.linear.x = self.linear_speed
+        cmd_vel_msg.linear.x = linear_x
         cmd_vel_msg.angular.z = angular_z
 
         return cmd_vel_msg
